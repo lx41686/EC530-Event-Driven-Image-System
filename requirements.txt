@@ -2,3 +2,4 @@ redis
 pymongo
 faiss-cpu
 pytest
+numpy
