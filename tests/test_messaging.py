@@ -35,5 +35,5 @@ def test_full_pipeline():
     # 5. Verification: Check if MongoDB has the data
     result = collection.find_one({"image_id": "test_img_456"})
     assert result is not None
-    assert result['objects'][0]['label'] == "cat"
+    assert result['annotations'][0]['label'] == "cat"
     print("!!! Full Pipeline Test Passed !!!")
