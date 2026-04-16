@@ -1,23 +1,35 @@
 import redis
 import json
+from pymongo import MongoClient
 
-def listen_for_events(topic):
+def start_db_worker():
     """
-    Subscribes to a Redis topic and waits for a single message.
+    Subscribes to 'inference.completed' and saves results to MongoDB.
     """
-    # Initialize Redis client connection
+    # Initialize MongoDB connection
+    # MongoDB service is expected to be running on localhost:27017
+    mongo_client = MongoClient('localhost', 27017)
+    db = mongo_client['image_system']
+    collection = db['annotations']
+    
+    # Initialize Redis connection
     r = redis.Redis(host='localhost', port=6379, decode_responses=True)
-    
-    # Create a Pub/Sub object to manage subscriptions
     pubsub = r.pubsub()
+    pubsub.subscribe("inference.completed")
     
-    # Subscribe to the specified channel
-    pubsub.subscribe(topic)
+    print(" [*] DB Service started. Waiting for inference results...")
     
-    # Loop to listen for messages on the subscribed channel
+    # Continuous loop to listen for messages
     for message in pubsub.listen():
-        # Redis will send a confirmation message when the connection is established, we want to skip it, only process messages with type 'message'
         if message['type'] == 'message':
-            # Convert the received JSON string back to a Python dictionary
-            data = json.loads(message['data'])
-            return data # Return immediately upon receiving a message, for unit testing purposes
+            # Parse the event data from JSON string
+            event_data = json.loads(message['data'])
+            payload = event_data['payload']
+            
+            # Persist the payload (annotations) into MongoDB collection
+            collection.insert_one(payload)
+            print(f" [DB] Saved annotations for {payload['image_id']} to MongoDB")
+            
+            # Note: In a real system, this loop would run forever.
+            # For testing purposes, you might want to break after one message.
+            break

@@ -1,43 +1,39 @@
 import pytest
 import time
 import threading
-from services.image_service import publish_event
-from services.db_service import listen_for_events
+from services.image_service import publish_image_submitted
+from pymongo import MongoClient
 
-def test_basic_pubsub():
+def test_full_pipeline():
     """
-    Test case to verify the basic Publish-Subscribe functionality using Redis.
-    It ensures that a message published on a specific topic is correctly 
-    received by a subscriber.
+    End-to-end test: Image Upload -> Inference -> MongoDB
     """
-    topic = "test.topic"
-    payload = {"message": "hello world"}
-    
-    # Storage for the received data from the background thread
-    results = []
+    # 1. Clear MongoDB before test
+    mongo_client = MongoClient('localhost', 27017)
+    db = mongo_client['image_system']
+    collection = db['annotations']
+    collection.delete_many({}) # Clear old data
 
-    def receiver():
-        """
-        Internal helper function to run the listener.
-        """
-        data = listen_for_events(topic)
-        results.append(data)
+    # 2. Start Services as background threads (In real life these are separate processes)
+    from services.inference_service import start_inference_worker
+    from services.db_service import start_db_worker
 
-    # Use a separate thread to listen for events because the listener is blocking.
-    # Think of this as turning on a radio in the background to wait for a broadcast.
-    thread = threading.Thread(target=receiver)
-    thread.daemon = True # Ensure thread exits when the main program ends
-    thread.start()
+    # Start workers
+    t1 = threading.Thread(target=start_inference_worker, daemon=True)
+    t2 = threading.Thread(target=start_db_worker, daemon=True)
+    t1.start()
+    t2.start()
     
-    # Give the subscriber a brief moment to establish a connection with Redis.
-    time.sleep(1)
-    
-    # Trigger the event by publishing the payload to the specified topic.
-    publish_event(topic, payload)
-    
-    # Wait for the background thread to finish processing the message.
-    thread.join(timeout=5)
-    
-    # Assertions: Verify if the message was received and if the content is correct.
-    assert len(results) > 0, "No message was received by the subscriber."
-    assert results[0]['payload']['message'] == "hello world", "The received payload does not match the sent data."
+    time.sleep(2) # Give them time to subscribe
+
+    # 3. Trigger the start of the chain
+    publish_image_submitted("test_img_456", "/path/to/cat.jpg")
+
+    # 4. Wait for the chain to complete
+    time.sleep(3)
+
+    # 5. Verification: Check if MongoDB has the data
+    result = collection.find_one({"image_id": "test_img_456"})
+    assert result is not None
+    assert result['objects'][0]['label'] == "cat"
+    print("!!! Full Pipeline Test Passed !!!")
