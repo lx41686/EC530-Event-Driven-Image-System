@@ -2,14 +2,22 @@ import redis
 import json
 
 def listen_for_events(topic):
+    """
+    Subscribes to a Redis topic and waits for a single message.
+    """
+    # Initialize Redis client connection
     r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+    
+    # Create a Pub/Sub object to manage subscriptions
     pubsub = r.pubsub()
+    
+    # Subscribe to the specified channel
     pubsub.subscribe(topic)
     
-    print(f" [*] Waiting for messages in {topic}. To exit press CTRL+C")
+    # Loop to listen for messages on the subscribed channel
     for message in pubsub.listen():
+        # Redis will send a confirmation message when the connection is established, we want to skip it, only process messages with type 'message'
         if message['type'] == 'message':
+            # Convert the received JSON string back to a Python dictionary
             data = json.loads(message['data'])
-            print(f" [v] Received event: {data['event_id']}")
-            # Example: Return the data for testing purposes. In a real application, you might process it instead.
-            return data 
+            return data # Return immediately upon receiving a message, for unit testing purposes
