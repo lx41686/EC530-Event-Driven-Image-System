@@ -1,40 +1,21 @@
 import redis
-import json
-import time
+import numpy as np # Remember to add numpy to requirements.txt
 
-def start_inference_worker():
+def mock_vector_generation(image_id):
     """
-    Listens to 'image.submitted' and simulates AI object detection.
+    Simulates the Embedding Service by generating a random 128-d vector.
+    Assigns a unique integer ID to the image_id for FAISS indexing.
     """
     r = redis.Redis(host='localhost', port=6379, decode_responses=True)
-    pubsub = r.pubsub()
-    pubsub.subscribe("image.submitted")
     
-    print(" [*] Inference Service started. Waiting for images...")
-    for message in pubsub.listen():
-        if message['type'] == 'message':
-            data = json.loads(message['data'])
-            img_id = data['payload']['image_id']
-            
-            # Simulate AI processing time
-            time.sleep(1) 
-            
-            # Mocked AI detection results (Annotations)
-            inference_results = {
-                "image_id": img_id,
-                "objects": [
-                    {"label": "cat", "confidence": 0.95, "bbox": [10, 20, 50, 50]},
-                    {"label": "tree", "confidence": 0.88, "bbox": [100, 200, 30, 40]}
-                ]
-            }
-            
-            # Publish completion event
-            completion_event = {
-                "topic": "inference.completed",
-                "event_id": f"inf_{int(time.time())}",
-                "payload": inference_results,
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            }
-            r.publish("inference.completed", json.dumps(completion_event))
-            print(f" [v] Inference completed for {img_id}")
-            
+    # 1. Generate an incremental integer ID (e.g., 1, 2, 3...)
+    # Redis 'incr' command is perfect for this
+    numeric_id = r.incr("global:image:id:counter")
+    
+    # 2. Store the mapping: numeric_id -> image_id
+    r.set(f"map:id:{numeric_id}", image_id)
+    
+    # 3. Mock a 128-dimension vector
+    vector = np.random.random(128).tolist()
+    
+    return numeric_id, vector
