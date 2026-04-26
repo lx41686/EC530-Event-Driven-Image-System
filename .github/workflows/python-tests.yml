@@ -1,12 +1,12 @@
 name: Python Unit Tests
 
-on: [push]  # run every time when git push
+on: [push]  # Trigger the workflow on every git push
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Activate Redis and MongoDB
+    # Activate Redis and MongoDB services in the GitHub Actions runner
     services:
       redis:
         image: redis
@@ -16,17 +16,24 @@ jobs:
         ports: ["27017:27017"]
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-        
+
     - name: Install dependencies
       run: |
-        pip install redis pymongo faiss-cpu pytest
-        
+        python -m pip install --upgrade pip
+        # Install standard requirements if the file exists
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # Fallback: Manually ensure critical test dependencies are present
+        pip install fastapi uvicorn python-multipart redis pymongo numpy pytest
+
     - name: Run Tests
       run: |
+        # Ensure the root directory is in PYTHONPATH so 'services' can be found
         export PYTHONPATH=$PYTHONPATH:$(pwd)
         pytest
