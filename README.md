@@ -24,26 +24,39 @@ Currently, the system has evolved from a basic messaging skeleton into a fully f
 
 Ensure you have **Redis** and **MongoDB** running locally:
 
-`brew services start redis/nbrew services start mongodb-community`
+`brew services start redis`
+
+`brew services start mongodb-community`
 
 **2. Environment Setup**
-`conda activate ec530
-pip install -r requirements.txt
-export PYTHONPATH=$(pwd)`
+
+`conda activate ec530`
+
+`pip install -r requirements.txt`
+
+`export PYTHONPATH=$(pwd)`
 
 **3. Start the Pipeline**
+
 Open three separate terminals and run:
+
 **Terminal 1: Image Upload Service (FastAPI)**
+
 `uvicorn services.image_service:app --reload`
+
 **Terminal 2: Inference Worker**
+
 `python services/inference_service.py`
+
 **Terminal 3: MongoDB Worker**
+
 `python services/db_service.py`
 
 We can now upload images via the Swagger UI at http://127.0.0.1:8000/docs.
 
 ### High-Load Stress Test
 Simulate a burst of 20 image submissions (including corrupted data) to verify system stability:
+
 `python scripts/event_splitter.py`
 
 ### TO DO:
