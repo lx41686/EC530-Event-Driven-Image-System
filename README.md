@@ -24,8 +24,7 @@ Currently, the system has evolved from a basic messaging skeleton into a fully f
 
 Ensure you have **Redis** and **MongoDB** running locally:
 
-`brew services start redis`
-`brew services start mongodb-community`
+`brew services start redis/nbrew services start mongodb-community`
 
 **2. Environment Setup**
 `conda activate ec530
