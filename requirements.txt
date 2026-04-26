@@ -1,5 +1,7 @@
 redis
 pymongo
-faiss-cpu
-pytest
 numpy
+pytest
+fastapi
+uvicorn
+python-multipart
