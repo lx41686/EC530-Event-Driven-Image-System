@@ -51,7 +51,7 @@ def test_full_pipeline():
     obj_result = collection.find_one({"image_id": test_image_id})
     assert obj_result is not None
     assert "object_id" in obj_result
-    assert "lat_long" in obj_result
+    assert "location" in obj_result
     print(f" [PASSED] MongoDB stored object: {obj_result['object_id']}")
 
     # B. 验证 FAISS (Vector DB)
