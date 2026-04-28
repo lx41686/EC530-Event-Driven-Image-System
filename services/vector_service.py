@@ -11,9 +11,13 @@ INDEX_FILE = "vector.index"
 DIMENSION = 128  # Must match the dimension in inference_service.py
 
 
-def start_vector_service():
+def start_vector_service(run_once=False):
     """
     Subscribes to 'vector.generated' and manages the FAISS Vector Index.
+
+    Args:
+        run_once (bool): If True, exits after processing one message.
+                        Used for automated testing (CI/CD).
     """
     r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     pubsub = r.pubsub()
@@ -30,7 +34,7 @@ def start_vector_service():
         index = faiss.IndexIDMap(index)
         print(" [*] Created new FAISS IndexIDMap")
 
-    print(f" [*] Vector Service started. Listening for 'vector.generated' events...")
+    print(f" [*] Vector Service started (run_once={run_once}). Listening...")
 
     for message in pubsub.listen():
         if message['type'] == 'message':
@@ -45,6 +49,7 @@ def start_vector_service():
 
                 if not vector or num_id is None:
                     print(" [!] Missing vector data or ID. Skipping...")
+                    if run_once: break
                     continue
 
                 # 3. Prepare data for FAISS
@@ -61,9 +66,16 @@ def start_vector_service():
                 print(f" [v] Vector added to FAISS: Image {img_id} (ID: {num_id})")
                 print(f" [Total Vectors in Index]: {index.ntotal}")
 
+                # --- NEW LOGIC: Support for automated testing ---
+                if run_once:
+                    print(" [TEST] run_once enabled. Vector Service exiting.")
+                    break
+
             except Exception as e:
                 print(f" [ERROR] Vector Service failure: {e}")
+                if run_once: break
 
 
 if __name__ == "__main__":
-    start_vector_service()
+    # Default behavior: Keep running to process incoming messages
+    start_vector_service(run_once=False)

@@ -1,4 +1,5 @@
 redis
+faiss-cpu
 pymongo
 numpy
 pytest
