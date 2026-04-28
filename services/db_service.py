@@ -3,60 +3,59 @@ import json
 import time
 from pymongo import MongoClient
 
+# Configuration
+REDIS_HOST = 'localhost'
+REDIS_PORT = 6379
+MONGO_URI = 'mongodb://localhost:27017/'
+DB_NAME = 'image_system'
+COLLECTION_NAME = 'object_annotations'  # 建议换个名字，强调存储的是 Object
 
-def start_db_worker(run_once=False):
+
+def start_db_service():
     """
-    Subscribes to 'inference.completed' topic and persists enriched
-    image metadata into MongoDB.
-
-    Args:
-        run_once (bool): If True, the service will stop after processing
-                         one message. Useful for unit tests.
+    Subscribes to 'object.detected' and stores each object as a
+    discrete document in MongoDB.
     """
-    try:
-        # 1. Initialize MongoDB connection
-        mongo_client = MongoClient('localhost', 27017, serverSelectionTimeoutMS=2000)
-        db = mongo_client['image_system']
-        collection = db['annotations']
+    # 1. Initialize Redis and MongoDB
+    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    pubsub = r.pubsub()
+    pubsub.subscribe("object.detected")
 
-        # 2. Initialize Redis connection
-        r = redis.Redis(host='localhost', port=6379, decode_responses=True)
-        pubsub = r.pubsub()
-        pubsub.subscribe("inference.completed")
+    mongo_client = MongoClient(MONGO_URI)
+    db = mongo_client[DB_NAME]
+    collection = db[COLLECTION_NAME]
 
-        print(" [*] DB Service started. Waiting for inference results...")
+    print(f" [*] DB Service started. Listening for 'object.detected' events...")
 
-        # 3. Continuous message processing loop
-        for message in pubsub.listen():
-            if message['type'] == 'message':
-                # Parse the incoming event data
+    for message in pubsub.listen():
+        if message['type'] == 'message':
+            try:
+                # 2. Parse Event
                 event_data = json.loads(message['data'])
                 payload = event_data.get('payload', {})
 
-                # Prepare a structured document for MongoDB storage
+                # 3. Build Document (The "Document DB" way)
+                # Each object detection is a unique entry
                 document = {
                     "image_id": payload.get('image_id'),
-                    "numeric_id": payload.get('numeric_id'),
-                    "vector": payload.get('vector'),
-                    "annotations": payload.get('objects', []),
-                    "event_timestamp": event_data.get('timestamp'),
-                    "db_stored_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "system_version": "1.1"
+                    "object_id": payload.get('object_id'),
+                    "label": payload.get('label'),
+                    "confidence": payload.get('confidence'),
+                    "bbox": payload.get('bbox'),
+                    "location": payload.get('lat_long'),  # 包含 lat 和 lng
+                    "system_version": "1.2",
+                    "db_stored_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 }
 
-                # Insert the enriched document into the MongoDB collection
-                collection.insert_one(document)
-                print(f" [DB] Successfully stored metadata for image: {payload.get('image_id')}")
+                # 4. Store in MongoDB
+                result = collection.insert_one(document)
 
-                # CRITICAL: If we are in 'run_once' mode (for Pytest), we break.
-                # Otherwise, we keep listening for the next image.
-                if run_once:
-                    break
+                print(f" [DB] Stored object {payload.get('object_id')} ({payload.get('label')}) "
+                      f"from image {payload.get('image_id')}")
 
-    except Exception as e:
-        print(f" [ERROR] DB Service encountered a failure: {e}")
+            except Exception as e:
+                print(f" [ERROR] DB Service failure: {e}")
 
 
 if __name__ == "__main__":
-    # When running as a service, we want it to run FOREVER (run_once=False)
-    start_db_worker(run_once=False)
+    start_db_service()
