@@ -3,6 +3,7 @@ import json
 import time
 import random
 import numpy as np
+import uuid
 
 # Configuration for Redis
 REDIS_HOST = 'localhost'
@@ -12,10 +13,6 @@ REDIS_PORT = 6379
 def mock_vector_generation(r, image_id: str):
     """
     Simulates an Embedding model generating a feature vector.
-
-    Args:
-        r: Redis client instance.
-        image_id (str): The string-based ID of the image.
     """
     if image_id is None:
         raise ValueError("image_id cannot be None")
@@ -34,11 +31,9 @@ def mock_vector_generation(r, image_id: str):
 
 def start_inference_worker(run_once=False):
     """
-    Subscribes to 'image.submitted', simulates AI inference,
-    and handles errors gracefully.
-
-    Args:
-        run_once (bool): If True, stops after processing one message (for tests).
+    Subscribes to 'image.submitted', splits detections into discrete events:
+    1. 'vector.generated' -> For FAISS (Vector DB)
+    2. 'object.detected'  -> For MongoDB (Document DB)
     """
     r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     pubsub = r.pubsub()
@@ -61,47 +56,58 @@ def start_inference_worker(run_once=False):
                 event_data = json.loads(message['data'])
                 payload = event_data.get('payload', {})
                 img_id = payload.get('image_id')
-                img_path = payload.get('image_path')
 
-                # 2. Validation Check: If data is corrupted, skip it
                 if not img_id:
                     print(f" [!] Skipping corrupted event: Missing image_id")
-                    if run_once: break  # Even if corrupted, exit if in test mode
+                    if run_once: break
                     continue
 
                 print(f" [v] Analyzing image: {img_id}")
-
-                # 3. Simulate processing
                 time.sleep(0.5)
-                detected_objects = random.sample(object_pool, random.randint(1, 2))
-                for obj in detected_objects:
-                    obj["bbox"] = [random.randint(0, 100) for _ in range(4)]
 
-                # 4. Vector Generation
+                # --- NEW LOGIC: DETECT OBJECTS AND ASSIGN IDS ---
+                detected_objects = random.sample(object_pool, random.randint(1, 2))
+
+                # Mock latitude and longitude for the image
+                lat = round(random.uniform(-90, 90), 6)
+                lng = round(random.uniform(-180, 180), 6)
+
+                # 2. Vector Generation (Target: FAISS)
                 num_id, vector = mock_vector_generation(r, img_id)
 
-                # 5. Build Result
-                inference_results = {
-                    "image_id": img_id,
-                    "numeric_id": num_id,
-                    "vector": vector,
-                    "objects": detected_objects,
-                    "processed_at_path": img_path
-                }
-
-                completion_event = {
-                    "topic": "inference.completed",
-                    "event_id": f"inf_{int(time.time())}",
-                    "payload": inference_results,
+                vector_event = {
+                    "topic": "vector.generated",
+                    "payload": {
+                        "image_id": img_id,
+                        "numeric_id": num_id,
+                        "vector": vector
+                    },
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 }
+                r.publish("vector.generated", json.dumps(vector_event))
+                print(f" [x] Vector event published for {img_id}.")
 
-                r.publish("inference.completed", json.dumps(completion_event))
-                print(f" [x] Inference complete for {img_id}.")
+                # 3. Individual Object Events (Target: MongoDB)
+                # We treat each detection as a discrete event as per the instructor's request
+                for obj in detected_objects:
+                    obj_id = f"obj_{uuid.uuid4().hex[:8]}"  # Unique Object ID
 
-                # --- Run once and exit if this is test ---
+                    object_event = {
+                        "topic": "object.detected",
+                        "payload": {
+                            "image_id": img_id,
+                            "object_id": obj_id,
+                            "label": obj["label"],
+                            "confidence": obj["confidence"],
+                            "bbox": [random.randint(0, 100) for _ in range(4)],
+                            "lat_long": {"lat": lat, "lng": lng}
+                        },
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                    }
+                    r.publish("object.detected", json.dumps(object_event))
+                    print(f" [x] Object event published: {obj['label']} ({obj_id})")
+
                 if run_once:
-                    print(" [TEST] run_once enabled. Exiting inference worker.")
                     break
 
             except Exception as e:
@@ -111,5 +117,4 @@ def start_inference_worker(run_once=False):
 
 
 if __name__ == "__main__":
-    # Default: run_once = False
     start_inference_worker(run_once=False)
