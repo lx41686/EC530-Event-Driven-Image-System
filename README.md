@@ -1,7 +1,7 @@
 # EC530-Event-Driven-Image-System
 
-## Project Status:
-Currently, the system has evolved from a basic messaging skeleton into a fully functional, asynchronous image processing pipeline. It now supports file uploads, handles corrupted data gracefully, and includes automated stress-testing tools (event_splitter.py).
+## Use of AI:
+Gemini was used to help understand the project objectives and the functions of each component, as well as to implement the code. The architectural design and logic are my own.
 
 ### Architectural Decisions
 - **Asynchronous Flow**: Image submission and inference are decoupled via Redis Pub/Sub to ensure high throughput and fault tolerance.
